@@ -1,0 +1,634 @@
+"""
+Excel Test Case MCP Server (Professional, Procedural, AI/Agent Ready)
+
+- Manages SW Validation Testing sheets with proper test case appending
+- Thread-safe operations for multi-user scenarios
+- Template-based Excel document creation and manipulation
+- Systematic test case management with validation
+"""
+
+from mcp.server.fastmcp import FastMCP
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
+from typing import List, Dict, Any, Optional
+import os
+import threading
+from datetime import datetime
+
+mcp = FastMCP("Excel Test Case MCP Server")
+
+# --- Thread-safe Workbook Store ---
+class WorkbookStore:
+    def __init__(self):
+        self._workbooks = {}
+        self._lock = threading.Lock()
+    
+    def create_from_template(self, wb_id: str, template_path: str):
+        with self._lock:
+            if wb_id in self._workbooks:
+                raise ValueError(f"Workbook '{wb_id}' already exists.")
+            if not os.path.exists(template_path):
+                raise ValueError(f"Template '{template_path}' does not exist.")
+            self._workbooks[wb_id] = load_workbook(template_path)
+    
+    def create_blank(self, wb_id: str):
+        with self._lock:
+            if wb_id in self._workbooks:
+                raise ValueError(f"Workbook '{wb_id}' already exists.")
+            self._workbooks[wb_id] = Workbook()
+    
+    def get(self, wb_id: str):
+        with self._lock:
+            if wb_id not in self._workbooks:
+                raise ValueError(f"Workbook '{wb_id}' does not exist.")
+            return self._workbooks[wb_id]
+    
+    def delete(self, wb_id: str):
+        with self._lock:
+            if wb_id in self._workbooks:
+                del self._workbooks[wb_id]
+    
+    def exists(self, wb_id: str) -> bool:
+        with self._lock:
+            return wb_id in self._workbooks
+
+WORKBOOKS = WorkbookStore()
+
+# --- Configuration ---
+CONFIG = {
+    "default_template_path": os.path.join(os.path.dirname(__file__), "sample.xlsx"),
+    "test_case_start_row": 13,
+    "max_test_cases": 37,  # Rows 13-49 (37 test cases max)
+    "header_row": 12,
+}
+
+# --- Styling Constants ---
+STYLES = {
+    "header_fill": PatternFill(start_color="B7DEE8", end_color="B7DEE8", fill_type="solid"),
+    "bold_font": Font(bold=True),
+    "title_font": Font(bold=True, size=14),
+    "italic_font": Font(italic=True),
+    "center_wrap": Alignment(horizontal="center", vertical="center", wrap_text=True),
+    "left_wrap": Alignment(wrap_text=True, vertical="center", horizontal="left"),
+    "black_border": Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000")
+    )
+}
+
+# --- Test Case Schema ---
+TEST_CASE_COLUMNS = [
+    "Traceability Req-ID",      # B (2)
+    "Test Case ID",             # C (3) 
+    "Priority",                 # D (4)
+    "Test Case Objective",      # E (5)
+    "Test Precondition",        # F (6)
+    "Test Steps",               # G (7)
+    "Test Inputs",              # H (8)
+    "Test Case Design Methodology", # I (9)
+    "Dependent Test Cases",     # J (10)
+    "Expected Outcome",         # K (11)
+    "Actual Outcome",           # L (12)
+    "Test Result",              # M (13)
+    "Remarks",                  # N (14)
+    "Track Bug ID"              # O (15)
+]
+
+# --- Helper Functions ---
+def get_next_available_row(ws, sheet_name: str = "SW Validation Testing") -> int:
+    """Find the next available row for adding test cases"""
+    if ws.title != sheet_name:
+        return CONFIG["test_case_start_row"]
+    
+    start_row = CONFIG["test_case_start_row"]
+    max_row = start_row + CONFIG["max_test_cases"] - 1
+    
+    # Check from start row to find first empty row
+    for row in range(start_row, max_row + 1):
+        # Check if Test Case ID column (C) is empty
+        if ws.cell(row=row, column=3).value is None or str(ws.cell(row=row, column=3).value).strip() == "":
+            return row
+    
+    # If all rows are filled, return next row (might exceed template)
+    return max_row + 1
+
+def setup_sw_validation_sheet(ws):
+    """Create the complete SW Validation Testing sheet structure"""
+    ws.title = "SW Validation Testing"
+    
+    # Set column widths
+    col_widths = {
+        'B': 25, 'C': 15, 'D': 10, 'E': 25, 'F': 25, 'G': 25, 'H': 25,
+        'I': 25, 'J': 25, 'K': 25, 'L': 25, 'M': 15, 'N': 30, 'O': 15, 'P': 15
+    }
+    for col, width in col_widths.items():
+        ws.column_dimensions[col].width = width
+    
+    # Row 2: Main title
+    ws.merge_cells('B2:P2')
+    ws['B2'] = "3.0 Software Validation Testing"
+    ws['B2'].font = STYLES["title_font"]
+    ws['B2'].alignment = STYLES["center_wrap"]
+    
+    # Row 4: Section title
+    ws['B4'] = "3.1 Testing Details"
+    ws['B4'].font = STYLES["bold_font"]
+    
+    # Testing details section
+    testing_details = {
+        'B5': "Project Name and ID",      'I5': "Test Environment",
+        'B6': "Features to be Tested",    'I6': "Test Case Designer",
+        'B7': "References/Input Documents with Version", 'I7': "Test Case Reviewer",
+        'B8': "Common Attributes",        'I8': "Tester",
+        'B9': "Notation for description", 'I9': "Test Start Date", 'J9': "dd-Mmm-yyyy",
+        'B10': "Version of Item under test", 'I10': "Test End Date", 'J10': "dd-Mmm-yyyy"
+    }
+    for cell, value in testing_details.items():
+        ws[cell] = value
+        if cell[0] in ['B', 'I']:
+            ws[cell].font = STYLES["bold_font"]
+    
+    # Summary section with formulas
+    ws['N9'] = "Total Test Cases"
+    ws['N9'].font = STYLES["bold_font"]
+    ws['N9'].alignment = STYLES["center_wrap"]
+    ws['N9'].border = STYLES["black_border"]
+    ws.merge_cells('N9:N10')
+    
+    ws['O9'] = '=SUM(O6:O8)'
+    ws['O9'].alignment = STYLES["center_wrap"]
+    ws['O9'].border = STYLES["black_border"]
+    ws.merge_cells('O9:O10')
+    
+    # Summary labels and formulas
+    summary_data = [
+        ("Total No of Bugs Identified", '=COUNTA(O13:O49)'),
+        ("Passed Test Cases", '=COUNTIF(M13:M49,"Passed")'),
+        ("Failed Test Cases", '=COUNTIF(M13:M49,"Failed")'),
+        ("Test Cases Not Tested", '=COUNTIF(M13:M49,"Not Tested")')
+    ]
+    
+    for i, (label, formula) in enumerate(summary_data):
+        row = 5 + i
+        ws[f'N{row}'] = label
+        ws[f'N{row}'].font = STYLES["bold_font"]
+        ws[f'N{row}'].alignment = STYLES["center_wrap"]
+        ws[f'N{row}'].border = STYLES["black_border"]
+        
+        ws[f'O{row}'] = formula
+        ws[f'O{row}'].alignment = STYLES["center_wrap"]
+        ws[f'O{row}'].border = STYLES["black_border"]
+    
+    # Section title for results
+    ws['B11'] = "3.2 Validation Testing Results"
+    ws['B11'].font = STYLES["bold_font"]
+    
+    # Table headers
+    headers = [
+        "Traceability\nReq-ID", "Test Case\nID", "Priority", "Test Case Objective",
+        "Test Precondition", "Test Steps", "Test Inputs\n(Conditions / Values)",
+        "Test Case Design\nMethodology", "Dependent\nTest Cases",
+        "Expected\nOutcome", "Actual\nOutcome", "Test Result", "Remarks", "Track Bug ID\n(If Applicable)"
+    ]
+    
+    for col_index, header in enumerate(headers, start=2):
+        col_letter = get_column_letter(col_index)
+        cell = ws[f'{col_letter}12']
+        cell.value = header
+        cell.font = STYLES["bold_font"]
+        cell.alignment = STYLES["center_wrap"]
+        cell.fill = STYLES["header_fill"]
+        cell.border = STYLES["black_border"]
+    
+    # Setup empty test case rows with borders
+    for row in range(13, 50):  # Rows 13-49 for test cases
+        for col in range(2, 16):  # Columns B to O
+            cell = ws.cell(row=row, column=col)
+            cell.border = STYLES["black_border"]
+    
+    # Add dropdown validation for Test Result column
+    dv = DataValidation(type="list", formula1='"Not Tested,Passed,Failed"', allow_blank=True)
+    dv.error = 'Select a value from the list'
+    dv.errorTitle = 'Invalid Input'
+    dv.prompt = 'Please select a test result'
+    dv.promptTitle = 'Test Result Selection'
+    ws.add_data_validation(dv)
+    dv.add('M13:M100')
+    
+    # Footer notes
+    ws.merge_cells('B51:O51')
+    ws['B51'] = '11 X 17 Document - CHECK THE PRINT PREVIEW OF THIS PAGE TO ENSURE THAT ALL THE COLUMNS FIT ON ONE SHEET OF PAPER'
+    ws['B51'].font = STYLES["italic_font"]
+    ws['B51'].alignment = STYLES["center_wrap"]
+    
+    ws.merge_cells('B52:O52')
+    ws['B52'] = 'USE "FIT ALL COLUMNS ON ONE PAGE" SCALING OPTION'
+    ws['B52'].font = STYLES["italic_font"]
+    ws['B52'].alignment = STYLES["center_wrap"]
+    
+    # Apply borders to the main content area
+    for row in range(2, 51):
+        for col in range(2, 16):
+            ws.cell(row=row, column=col).border = STYLES["black_border"]
+
+# --- MCP Tools ---
+
+@mcp.tool(description="Create a new Excel workbook from template. If template_path not provided, creates SW Validation Testing sheet from scratch.")
+def create_workbook(wb_id: str, template_path: str = None) -> str:
+    try:
+        if template_path is None:
+            template_path = CONFIG.get("default_template_path")
+        
+        if template_path and os.path.exists(template_path):
+            WORKBOOKS.create_from_template(wb_id, template_path)
+            return f"Workbook '{wb_id}' created from template '{template_path}'."
+        else:
+            WORKBOOKS.create_blank(wb_id)
+            wb = WORKBOOKS.get(wb_id)
+            setup_sw_validation_sheet(wb.active)
+            if template_path:
+                return f"Workbook '{wb_id}' created with SW Validation sheet (template '{template_path}' not found)."
+            else:
+                return f"Workbook '{wb_id}' created with SW Validation Testing sheet."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Open an existing Excel workbook from file path.")
+def open_workbook(wb_id: str, filepath: str) -> str:
+    try:
+        if WORKBOOKS.exists(wb_id):
+            return f"Error: Workbook '{wb_id}' already exists in memory."
+        
+        if not os.path.exists(filepath):
+            return f"Error: File '{filepath}' does not exist."
+        
+        WORKBOOKS.create_from_template(wb_id, filepath)
+        return f"Workbook '{wb_id}' opened from '{filepath}'."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Add a single test case to the SW Validation Testing sheet. Automatically finds next available row.")
+def add_test_case(
+    wb_id: str,
+    traceability_req_id: str,
+    test_case_id: str,
+    priority: str,
+    test_case_objective: str,
+    test_precondition: str,
+    test_steps: str,
+    test_inputs: str,
+    test_case_design_methodology: str,
+    dependent_test_cases: str = "None",
+    expected_outcome: str = "",
+    actual_outcome: str = "",
+    test_result: str = "Not Tested",
+    remarks: str = "",
+    track_bug_id: str = "",
+    sheet_name: str = "SW Validation Testing"
+) -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        # Get the target worksheet
+        if sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        else:
+            return f"Error: Sheet '{sheet_name}' not found in workbook '{wb_id}'."
+        
+        # Find next available row
+        next_row = get_next_available_row(ws, sheet_name)
+        
+        # Validate test result
+        valid_results = ["Not Tested", "Passed", "Failed"]
+        if test_result not in valid_results:
+            test_result = "Not Tested"
+        
+        # Prepare test case data
+        test_case_data = [
+            traceability_req_id,
+            test_case_id,
+            priority,
+            test_case_objective,
+            test_precondition,
+            test_steps,
+            test_inputs,
+            test_case_design_methodology,
+            dependent_test_cases,
+            expected_outcome,
+            actual_outcome,
+            test_result,
+            remarks,
+            track_bug_id
+        ]
+        
+        # Write test case data to worksheet
+        for col_index, value in enumerate(test_case_data, start=2):  # Start from column B (2)
+            cell = ws.cell(row=next_row, column=col_index)
+            cell.value = value
+            cell.alignment = STYLES["left_wrap"]
+            cell.border = STYLES["black_border"]
+        
+        return f"Test case '{test_case_id}' added to row {next_row} in sheet '{sheet_name}'."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Add multiple test cases at once. Each test case should be a dictionary with required fields.")
+def add_multiple_test_cases(wb_id: str, test_cases: List[Dict[str, str]], sheet_name: str = "SW Validation Testing") -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        if sheet_name not in wb.sheetnames:
+            return f"Error: Sheet '{sheet_name}' not found in workbook '{wb_id}'."
+        
+        ws = wb[sheet_name]
+        added_count = 0
+        
+        for test_case in test_cases:
+            try:
+                # Extract required fields with defaults
+                traceability_req_id = test_case.get("traceability_req_id", "")
+                test_case_id = test_case.get("test_case_id", "")
+                priority = test_case.get("priority", "Medium")
+                test_case_objective = test_case.get("test_case_objective", "")
+                test_precondition = test_case.get("test_precondition", "")
+                test_steps = test_case.get("test_steps", "")
+                test_inputs = test_case.get("test_inputs", "")
+                test_case_design_methodology = test_case.get("test_case_design_methodology", "")
+                dependent_test_cases = test_case.get("dependent_test_cases", "None")
+                expected_outcome = test_case.get("expected_outcome", "")
+                actual_outcome = test_case.get("actual_outcome", "")
+                test_result = test_case.get("test_result", "Not Tested")
+                remarks = test_case.get("remarks", "")
+                track_bug_id = test_case.get("track_bug_id", "")
+                
+                # Find next available row
+                next_row = get_next_available_row(ws, sheet_name)
+                
+                # Validate test result
+                valid_results = ["Not Tested", "Passed", "Failed"]
+                if test_result not in valid_results:
+                    test_result = "Not Tested"
+                
+                # Prepare and write test case data
+                test_case_data = [
+                    traceability_req_id, test_case_id, priority, test_case_objective,
+                    test_precondition, test_steps, test_inputs, test_case_design_methodology,
+                    dependent_test_cases, expected_outcome, actual_outcome, test_result,
+                    remarks, track_bug_id
+                ]
+                
+                for col_index, value in enumerate(test_case_data, start=2):
+                    cell = ws.cell(row=next_row, column=col_index)
+                    cell.value = value
+                    cell.alignment = STYLES["left_wrap"]
+                    cell.border = STYLES["black_border"]
+                
+                added_count += 1
+                
+            except Exception as tc_error:
+                print(f"Warning: Failed to add test case {test_case.get('test_case_id', 'Unknown')}: {str(tc_error)}")
+        
+        return f"Successfully added {added_count} test cases to sheet '{sheet_name}'."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Update a specific test case by Test Case ID.")
+def update_test_case(
+    wb_id: str,
+    test_case_id: str,
+    field_updates: Dict[str, str],
+    sheet_name: str = "SW Validation Testing"
+) -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        if sheet_name not in wb.sheetnames:
+            return f"Error: Sheet '{sheet_name}' not found."
+        
+        ws = wb[sheet_name]
+        
+        # Find the test case by ID (column C)
+        test_case_row = None
+        start_row = CONFIG["test_case_start_row"]
+        end_row = start_row + CONFIG["max_test_cases"]
+        
+        for row in range(start_row, end_row):
+            if ws.cell(row=row, column=3).value == test_case_id:
+                test_case_row = row
+                break
+        
+        if test_case_row is None:
+            return f"Error: Test case '{test_case_id}' not found."
+        
+        # Map field names to column indices
+        field_to_col = {
+            "traceability_req_id": 2, "test_case_id": 3, "priority": 4,
+            "test_case_objective": 5, "test_precondition": 6, "test_steps": 7,
+            "test_inputs": 8, "test_case_design_methodology": 9,
+            "dependent_test_cases": 10, "expected_outcome": 11,
+            "actual_outcome": 12, "test_result": 13, "remarks": 14,
+            "track_bug_id": 15
+        }
+        
+        updated_fields = []
+        for field_name, new_value in field_updates.items():
+            if field_name in field_to_col:
+                col_index = field_to_col[field_name]
+                
+                # Validate test result
+                if field_name == "test_result" and new_value not in ["Not Tested", "Passed", "Failed"]:
+                    new_value = "Not Tested"
+                
+                ws.cell(row=test_case_row, column=col_index).value = new_value
+                updated_fields.append(field_name)
+        
+        return f"Updated test case '{test_case_id}' fields: {', '.join(updated_fields)}."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Get all test cases from the SW Validation Testing sheet.")
+def get_all_test_cases(wb_id: str, sheet_name: str = "SW Validation Testing") -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        if sheet_name not in wb.sheetnames:
+            return f"Error: Sheet '{sheet_name}' not found."
+        
+        ws = wb[sheet_name]
+        test_cases = []
+        
+        start_row = CONFIG["test_case_start_row"]
+        end_row = start_row + CONFIG["max_test_cases"]
+        
+        for row in range(start_row, end_row):
+            # Check if Test Case ID is not empty
+            test_case_id = ws.cell(row=row, column=3).value
+            if test_case_id and str(test_case_id).strip():
+                test_case = {}
+                for col_index, field_name in enumerate(TEST_CASE_COLUMNS, start=2):
+                    cell_value = ws.cell(row=row, column=col_index).value
+                    test_case[field_name] = cell_value if cell_value is not None else ""
+                test_cases.append(f"Row {row}: {test_case}")
+        
+        if not test_cases:
+            return f"No test cases found in sheet '{sheet_name}'."
+        
+        return f"Found {len(test_cases)} test cases:\n" + "\n".join(test_cases)
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Get test case statistics and summary.")
+def get_test_case_summary(wb_id: str, sheet_name: str = "SW Validation Testing") -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        if sheet_name not in wb.sheetnames:
+            return f"Error: Sheet '{sheet_name}' not found."
+        
+        ws = wb[sheet_name]
+        
+        total_count = 0
+        passed_count = 0
+        failed_count = 0
+        not_tested_count = 0
+        bug_count = 0
+        
+        start_row = CONFIG["test_case_start_row"]
+        end_row = start_row + CONFIG["max_test_cases"]
+        
+        for row in range(start_row, end_row):
+            # Check if Test Case ID is not empty
+            test_case_id = ws.cell(row=row, column=3).value
+            if test_case_id and str(test_case_id).strip():
+                total_count += 1
+                
+                # Check test result (column M = 13)
+                test_result = ws.cell(row=row, column=13).value
+                if test_result == "Passed":
+                    passed_count += 1
+                elif test_result == "Failed":
+                    failed_count += 1
+                else:
+                    not_tested_count += 1
+                
+                # Check for bug ID (column O = 15)
+                bug_id = ws.cell(row=row, column=15).value
+                if bug_id and str(bug_id).strip():
+                    bug_count += 1
+        
+        summary = f"""Test Case Summary for '{sheet_name}':
+Total Test Cases: {total_count}
+Passed: {passed_count}
+Failed: {failed_count}
+Not Tested: {not_tested_count}
+Test Cases with Bugs: {bug_count}
+Next Available Row: {get_next_available_row(ws, sheet_name)}"""
+        
+        return summary
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Update testing details section (project info, dates, etc.).")
+def update_testing_details(
+    wb_id: str,
+    project_name: str = "",
+    features_to_test: str = "",
+    references: str = "",
+    common_attributes: str = "",
+    notation: str = "",
+    version_under_test: str = "",
+    test_environment: str = "",
+    test_case_designer: str = "",
+    test_case_reviewer: str = "",
+    tester: str = "",
+    test_start_date: str = "",
+    test_end_date: str = "",
+    sheet_name: str = "SW Validation Testing"
+) -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        if sheet_name not in wb.sheetnames:
+            return f"Error: Sheet '{sheet_name}' not found."
+        
+        ws = wb[sheet_name]
+        
+        # Mapping of parameters to cell locations
+        details_mapping = {
+            "project_name": ("C5", project_name),
+            "features_to_test": ("C6", features_to_test),
+            "references": ("C7", references),
+            "common_attributes": ("C8", common_attributes),
+            "notation": ("C9", notation),
+            "version_under_test": ("C10", version_under_test),
+            "test_environment": ("J5", test_environment),
+            "test_case_designer": ("J6", test_case_designer),
+            "test_case_reviewer": ("J7", test_case_reviewer),
+            "tester": ("J8", tester),
+            "test_start_date": ("J9", test_start_date),
+            "test_end_date": ("J10", test_end_date),
+        }
+        
+        updated_fields = []
+        for field_name, (cell_ref, value) in details_mapping.items():
+            if value.strip():  # Only update non-empty values
+                ws[cell_ref] = value
+                updated_fields.append(field_name)
+        
+        return f"Updated testing details: {', '.join(updated_fields)}."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Save the workbook to a .xlsx file.")
+def save_workbook(wb_id: str, filepath: str) -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        wb.save(filepath)
+        return f"Workbook '{wb_id}' saved to {filepath}."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Get workbook basic information.")
+def get_workbook_info(wb_id: str) -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        info = f"Workbook '{wb_id}' information:\n"
+        info += f"  Sheets: {', '.join(wb.sheetnames)}\n"
+        
+        # If SW Validation Testing sheet exists, provide test case count
+        if "SW Validation Testing" in wb.sheetnames:
+            ws = wb["SW Validation Testing"]
+            test_count = 0
+            start_row = CONFIG["test_case_start_row"]
+            end_row = start_row + CONFIG["max_test_cases"]
+            
+            for row in range(start_row, end_row):
+                test_case_id = ws.cell(row=row, column=3).value
+                if test_case_id and str(test_case_id).strip():
+                    test_count += 1
+            
+            info += f"  Test Cases in SW Validation Testing: {test_count}\n"
+            info += f"  Next Available Row: {get_next_available_row(ws)}"
+        
+        return info
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Delete a workbook from memory.")
+def delete_workbook(wb_id: str) -> str:
+    try:
+        if not WORKBOOKS.exists(wb_id):
+            return f"Error: Workbook '{wb_id}' does not exist."
+        
+        WORKBOOKS.delete(wb_id)
+        return f"Workbook '{wb_id}' deleted from memory."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+if __name__ == "__main__":
+    mcp.run()
