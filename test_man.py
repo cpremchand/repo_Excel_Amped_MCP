@@ -36,7 +36,7 @@ class WorkbookStore:
     def create_blank(self, wb_id: str):
         with self._lock:
             if wb_id in self._workbooks:
-                raise ValueError(f"Workbook '{wb_id}' already exists.")
+                raise ValueError(f"Workbook '{wb_id}' already exis")
             self._workbooks[wb_id] = Workbook()
     
     def get(self, wb_id: str):
