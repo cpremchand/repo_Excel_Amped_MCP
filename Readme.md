@@ -36,7 +36,7 @@ Each functional and non-functional requirement from the SRS will be mapped to on
 ## Few-Shot Prompt to Use
 
 ```
-You are given an SRS (Software Requirements Specification) document. Using this document, generate an Excel file for both Validation Testing and Integration Testing and Unit Testing. For each functional and non-functional requirement in the SRS, create all applicable test cases, including edge cases. Each requirement may have multiple test cases.
+You are given an SRS (Software Requirements Specification) document. Using this document, generate an Excel file for both Validation Testing and Integration Testing. For each functional and non-functional requirement in the SRS, create all applicable test cases, including edge cases. Each requirement may have multiple test cases.
 
 Format each row in the Excel as follows (see example):
 
