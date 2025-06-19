@@ -47,7 +47,7 @@ Example Row:
 
 Instructions:
 - For every requirement (functional and non-functional), generate as many test cases as needed to cover all normal, boundary, and edge scenarios.
-- Include both Validation Testing and Integration Testing test cases.
+- Include both Validation Testing and Integration Testing test cases and Unit Test Cases.
 - Use clear, concise language and ensure traceability to the SRS requirements.
 - Save the resulting Excel file as test_cases.xlsx in the path: D:\archive\test_hub\test_now\AI_POC_Ideas\repo_Excel_Amped_MCP.
 - Sheet name: test_cases.
