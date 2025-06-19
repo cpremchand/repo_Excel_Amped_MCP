@@ -1,7 +1,7 @@
 # Test Case Excel Generation from SRS
 
 ## Objective
-Generate a comprehensive Excel file for **Validation Testing** and **Integration Testing** and **Unit Testing** based on your SRS (Software Requirements Specification) document.  
+Generate a comprehensive Excel file for **Validation Testing** and **Integration Testing** based on your SRS (Software Requirements Specification) document.  
 Each functional and non-functional requirement from the SRS will be mapped to one or more test cases, including edge cases.
 
 ---
@@ -13,7 +13,7 @@ Each functional and non-functional requirement from the SRS will be mapped to on
 
 2. **Test Case Coverage**:  
    - For **every** functional and non-functional requirement, create multiple test cases as needed to cover all normal, boundary, and edge scenarios.
-   - Cover both **Validation Testing** and **Integration Testing** and **Unit Testing**.
+   - Cover both **Validation Testing** and **Integration Testing**.
 
 3. **Excel Output**:  
    - Save the file as: `test_cases.xlsx`  
@@ -47,7 +47,7 @@ Example Row:
 
 Instructions:
 - For every requirement (functional and non-functional), generate as many test cases as needed to cover all normal, boundary, and edge scenarios.
-- Include both Validation Testing and Integration Testing test cases and Unit Test Cases.
+- Include both Validation Testing and Integration Testing test cases.
 - Use clear, concise language and ensure traceability to the SRS requirements.
 - Save the resulting Excel file as test_cases.xlsx in the path: D:\archive\test_hub\test_now\AI_POC_Ideas\repo_Excel_Amped_MCP.
 - Sheet name: test_cases.
