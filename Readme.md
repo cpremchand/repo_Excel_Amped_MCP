@@ -13,7 +13,7 @@ Each functional and non-functional requirement from the SRS will be mapped to on
 
 2. **Test Case Coverage**:  
    - For **every** functional and non-functional requirement, create multiple test cases as needed to cover all normal, boundary, and edge scenarios.
-   - Cover both **Validation Testing** and **Integration Testing**.
+   - Cover both **Validation Testing** and **Integration Testing** and **Unit Testing**.
 
 3. **Excel Output**:  
    - Save the file as: `test_cases.xlsx`  
