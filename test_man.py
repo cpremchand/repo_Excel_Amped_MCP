@@ -272,7 +272,7 @@ def open_workbook(wb_id: str, filepath: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
-@mcp.tool(description="Add a single test case to the SW Validation Testing sheet, SW Intergration Testing Sheet and also for SW Unit Testing Sheet. Automatically finds next available row.")
+@mcp.tool(description="Add a single test case to the SW Validation Testing sheet, SW Intergration Testing Sheet, SW Unit Testing Sheet. Automatically finds next available row.")
 def add_test_case(
     wb_id: str,
     traceability_req_id: str,
