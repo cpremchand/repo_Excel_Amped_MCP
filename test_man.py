@@ -596,22 +596,25 @@ def update_testing_details(
         # Fill left block (B5:D10 label, E5:H10 value)
         for i, (label, value) in enumerate(zip(left_labels, left_values)):
             row = 5 + i
-            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)  # B:D label
-            ws.merge_cells(start_row=row, start_column=5, end_row=row, end_column=8)  # E:H value
-            ws.cell(row=row, column=2, value=label)   # B
             ws.cell(row=row, column=5, value=value)   # E
             ws.cell(row=row, column=5).alignment = STYLES["left_wrap"]
  
         # Fill right block (I5:I10 label, J5:M10 value)
         for i, (label, value) in enumerate(zip(right_labels, right_values)):
             row = 5 + i
-            ws.merge_cells(start_row=row, start_column=9, end_row=row, end_column=9)   # I label
-            ws.merge_cells(start_row=row, start_column=10, end_row=row, end_column=13) # J:M value
-            ws.cell(row=row, column=9, value=label)   # I
             ws.cell(row=row, column=10, value=value)  # J
             ws.cell(row=row, column=10).alignment = STYLES["left_wrap"]
  
         return f"Testing details updated on sheet '{sheet_name}'."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@mcp.tool(description="Save the workbook to a .xlsx file.")
+def save_workbook(wb_id: str, filepath: str) -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        wb.save(filepath)
+        return f"Workbook '{wb_id}' saved to {filepath}."
     except Exception as e:
         return f"Error: {str(e)}"
 
