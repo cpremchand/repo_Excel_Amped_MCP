@@ -551,35 +551,60 @@ def update_testing_details(
 ) -> str:
     try:
         wb = WORKBOOKS.get(wb_id)
-        
         if sheet_name not in wb.sheetnames:
             return f"Error: Sheet '{sheet_name}' not found."
-        
+ 
         ws = wb[sheet_name]
-        
-        # Mapping of parameters to cell locations
-        details_mapping = {
-            "project_name": ("C5", project_name),
-            "features_to_test": ("C6", features_to_test),
-            "references": ("C7", references),
-            "common_attributes": ("C8", common_attributes),
-            "notation": ("C9", notation),
-            "version_under_test": ("C10", version_under_test),
-            "test_environment": ("J5", test_environment),
-            "test_case_designer": ("J6", test_case_designer),
-            "test_case_reviewer": ("J7", test_case_reviewer),
-            "tester": ("J8", tester),
-            "test_start_date": ("J9", test_start_date),
-            "test_end_date": ("J10", test_end_date),
-        }
-        
-        updated_fields = []
-        for field_name, (cell_ref, value) in details_mapping.items():
-            if value.strip():  # Only update non-empty values
-                ws[cell_ref] = value
-                updated_fields.append(field_name)
-        
-        return f"Updated testing details: {', '.join(updated_fields)}."
+ 
+        # Mapping for left block (Project details: B5:D10 label, E5:H10 value)
+        left_labels = [
+            "Project Name and ID",
+            "Features to be Tested",
+            "References/Input Documents with Version",
+            "Common Attributes",
+            "Notation for description",
+            "Version of Item under test"
+        ]
+        left_values = [
+            project_name,
+            features_to_test,
+            references,
+            common_attributes,
+            notation,
+            version_under_test
+        ]
+ 
+        # Mapping for right block (Test details: I5:I10 label, J5:M10 value)
+        right_labels = [
+            "Test Environment",
+            "Test Case Designer",
+            "Test Case Reviewer",
+            "Tester",
+            "Test Start Date",
+            "Test End Date"
+        ]
+        right_values = [
+            test_environment,
+            test_case_designer,
+            test_case_reviewer,
+            tester,
+            test_start_date,
+            test_end_date
+        ]
+ 
+        # Fill left block (B5:D10 label, E5:H10 value)
+        for i, (label, value) in enumerate(zip(left_labels, left_values)):
+            row = 5 + i
+            ws.cell(row=row, column=5, value=value)   # E
+            ws.cell(row=row, column=5).alignment = STYLES["left_wrap"]
+ 
+        # Fill right block (I5:I10 label, J5:M10 value)
+        for i, (label, value) in enumerate(zip(right_labels, right_values)):
+            row = 5 + i
+            ws.cell(row=row, column=10, value=value)  # J
+            ws.cell(row=row, column=10).alignment = STYLES["left_wrap"]
+ 
+        return f"Testing details updated on sheet '{sheet_name}'."
     except Exception as e:
         return f"Error: {str(e)}"
 
