@@ -1,7 +1,7 @@
 # Test Case Excel Generation from SRS
 
 ## Objective
-Generate a comprehensive Excel file for **Validation Testing** and **Integration Testing** based on your SRS (Software Requirements Specification) document.  
+Generate a comprehensive Excel file for **Validation Testing** and **Integration Testing** and **Unit Testing** based on your SRS (Software Requirements Specification) document.  
 Each functional and non-functional requirement from the SRS will be mapped to one or more test cases, including edge cases.
 
 ---
