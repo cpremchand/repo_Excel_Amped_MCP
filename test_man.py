@@ -609,6 +609,37 @@ def update_testing_details(
     except Exception as e:
         return f"Error: {str(e)}"
 
+
+@mcp.tool(description="Extract testing details from the given sheet (SW Validation Testing, SW Intergration Testing, SW Unit Testing).")
+def get_testing_details(wb_id: str, sheet_name: str = "SW Validation Testing") -> dict:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        if sheet_name not in wb.sheetnames:
+            return {"error": f"Sheet '{sheet_name}' not found in workbook."}
+        
+        ws = wb[sheet_name]
+
+        details = {
+            "Project Name and ID": ws["E5"].value,
+            "Features to be Tested": ws["E6"].value,
+            "References": ws["E7"].value,
+            "Common Attributes": ws["E8"].value,
+            "Notation": ws["E9"].value,
+            "Version under Test": ws["E10"].value,
+            "Test Environment": ws["J5"].value,
+            "Test Case Designer": ws["J6"].value,
+            "Test Case Reviewer": ws["J7"].value,
+            "Tester": ws["J8"].value,
+            "Test Start Date": ws["J9"].value,
+            "Test End Date": ws["J10"].value,
+        }
+
+        return details
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @mcp.tool(description="Save the workbook to a .xlsx file.")
 def save_workbook(wb_id: str, filepath: str) -> str:
     try:
