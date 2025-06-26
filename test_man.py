@@ -16,8 +16,49 @@ from typing import List, Dict, Any, Optional
 import os
 import threading
 from datetime import datetime
+import textwrap
+import re
+
+def step_wrap(text: str) -> str:
+    """
+    Adds newlines before each numbered step (1., 2., 3., ...) for clearer formatting.
+    """
+    # Clean up input whitespace
+    text = text.strip()
+
+    # Ensure new line before each number + dot (e.g., 2. or 10.)
+    return re.sub(r'\s*(?=\d+\.)', '\n', text)
+
 
 mcp = FastMCP("Excel Test Case MCP Server")
+
+
+# --- Helper Functions ---
+def get_next_available_row(ws, sheet_name: str = "SW Validation Testing") -> int:
+    ...
+    return row
+
+
+
+def auto_wrap_text(text: str, max_len: int = 50) -> str:
+    """
+    Breaks long text into multiple lines at word boundaries
+    to help Excel auto-expand row height.
+    """
+    if not text:
+        return ""
+    return '\n'.join(textwrap.wrap(text, width=max_len))
+
+def step_wrap(text: str) -> str:
+    """
+    Adds newlines before each numbered step (1., 2., 3., ...) for clearer formatting.
+    """
+    # Clean up input whitespace
+    text = text.strip()
+
+    # Ensure new line before each number + dot (e.g., 2. or 10.)
+    return re.sub(r'\s*(?=\d+\.)', '\n', text)
+
 
 # --- Thread-safe Workbook Store ---
 class WorkbookStore:
@@ -34,10 +75,11 @@ class WorkbookStore:
             self._workbooks[wb_id] = load_workbook(template_path)
     
     def create_blank(self, wb_id: str):
-        with self._lock:
-            if wb_id in self._workbooks:
-                raise ValueError(f"Workbook '{wb_id}' already exist.")
-            self._workbooks[wb_id] = Workbook()
+        wb_id = str(uuid.uuid4())
+        self._workbooks[wb_id] = Workbook()
+        
+        self._workbooks[wb_id].calculation_properties.fullCalcOnLoad = True
+        return wb_id
     
     def get(self, wb_id: str):
         with self._lock:
@@ -60,7 +102,7 @@ WORKBOOKS = WorkbookStore()
 CONFIG = {
     "default_template_path": os.path.join(os.path.dirname(__file__), "sample.xlsx"),
     "test_case_start_row": 13,
-    "max_test_cases": 37,  # Rows 13-49 (37 test cases max)
+    "max_test_cases": 100,  # Rows 13 to 112 (100 test cases)
     "header_row": 12,
 }
 
@@ -153,26 +195,29 @@ def setup_sw_validation_sheet(ws):
         if cell[0] in ['B', 'I']:
             ws[cell].font = STYLES["bold_font"]
     
-    # Summary section with formulas
+    # Dynamic row range
+    start_row = CONFIG["test_case_start_row"]
+    end_row = start_row + CONFIG["max_test_cases"] - 1
+
+    # Total Test Cases count (based on non-empty Test Case ID column)
     ws['N9'] = "Total Test Cases"
     ws['N9'].font = STYLES["bold_font"]
     ws['N9'].alignment = STYLES["center_wrap"]
     ws['N9'].border = STYLES["black_border"]
     ws.merge_cells('N9:N10')
-    
-    ws['O9'] = '=SUM(O6:O8)'
+
+    ws['O9'] = f'=COUNTA(C{start_row}:C{end_row})'
     ws['O9'].alignment = STYLES["center_wrap"]
     ws['O9'].border = STYLES["black_border"]
     ws.merge_cells('O9:O10')
-    
-    # Summary labels and formulas
+
     summary_data = [
-        ("Total No of Bugs Identified", '=COUNTA(O13:O49)'),
-        ("Passed Test Cases", '=COUNTIF(M13:M49,"Passed")'),
-        ("Failed Test Cases", '=COUNTIF(M13:M49,"Failed")'),
-        ("Test Cases Not Tested", '=COUNTIF(M13:M49,"Not Tested")')
+        ("Total No of Bugs Identified", f'=COUNTA(O{start_row}:O{end_row})'),
+        ("Passed Test Cases", f'=COUNTIF(M{start_row}:M{end_row},"Passed")'),
+        ("Failed Test Cases", f'=COUNTIF(M{start_row}:M{end_row},"Failed")'),
+        ("Test Cases Not Tested", f'=COUNTIF(M{start_row}:M{end_row},"Not Tested")')
     ]
-    
+
     for i, (label, formula) in enumerate(summary_data):
         row = 5 + i
         ws[f'N{row}'] = label
@@ -205,11 +250,14 @@ def setup_sw_validation_sheet(ws):
         cell.fill = STYLES["header_fill"]
         cell.border = STYLES["black_border"]
     
-    # Setup empty test case rows with borders
-    for row in range(13, 50):  # Rows 13-49 for test cases
+
+    for row in range(start_row, end_row + 1):
         for col in range(2, 16):  # Columns B to O
-            cell = ws.cell(row=row, column=col)
-            cell.border = STYLES["black_border"]
+            ws.cell(row=row, column=col).border = STYLES["black_border"]
+            
+    for row in range(start_row, end_row + 1):
+        ws[f"M{row}"].value = ""  # Force-create the cell
+
     
     # Add dropdown validation for Test Result column
     dv = DataValidation(type="list", formula1='"Not Tested,Passed,Failed"', allow_blank=True)
@@ -218,23 +266,7 @@ def setup_sw_validation_sheet(ws):
     dv.prompt = 'Please select a test result'
     dv.promptTitle = 'Test Result Selection'
     ws.add_data_validation(dv)
-    dv.add('M13:M100')
-    
-    # Footer notes
-    ws.merge_cells('B51:O51')
-    ws['B51'] = '11 X 17 Document - CHECK THE PRINT PREVIEW OF THIS PAGE TO ENSURE THAT ALL THE COLUMNS FIT ON ONE SHEET OF PAPER'
-    ws['B51'].font = STYLES["italic_font"]
-    ws['B51'].alignment = STYLES["center_wrap"]
-    
-    ws.merge_cells('B52:O52')
-    ws['B52'] = 'USE "FIT ALL COLUMNS ON ONE PAGE" SCALING OPTION'
-    ws['B52'].font = STYLES["italic_font"]
-    ws['B52'].alignment = STYLES["center_wrap"]
-    
-    # Apply borders to the main content area
-    for row in range(2, 51):
-        for col in range(2, 16):
-            ws.cell(row=row, column=col).border = STYLES["black_border"]
+    dv.add(f"M{start_row}:M{end_row}")  #  Dynamic range
 
 # --- MCP Tools ---
 
@@ -272,7 +304,7 @@ def open_workbook(wb_id: str, filepath: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
-@mcp.tool(description="Add a single test case to the SW Validation Testing sheet, SW Intergration Testing Sheet, SW Unit Testing Sheet. Automatically finds next available row.")
+@mcp.tool(description="Add a single test case to the SW Validation Testing sheet, SW Intergration Testing Sheet, SW Unit Testing Sheet.")
 def add_test_case(
     wb_id: str,
     traceability_req_id: str,
@@ -310,20 +342,20 @@ def add_test_case(
         
         # Prepare test case data
         test_case_data = [
-            traceability_req_id,
-            test_case_id,
-            priority,
-            test_case_objective,
-            test_precondition,
-            test_steps,
-            test_inputs,
-            test_case_design_methodology,
-            dependent_test_cases,
-            expected_outcome,
-            actual_outcome,
-            test_result,
-            remarks,
-            track_bug_id
+            auto_wrap_text(traceability_req_id),
+            auto_wrap_text(test_case_id),
+            auto_wrap_text(priority),
+            auto_wrap_text(test_case_objective),
+            auto_wrap_text(test_precondition),
+            step_wrap(test_steps),
+            auto_wrap_text(test_inputs),
+            auto_wrap_text(test_case_design_methodology),
+            auto_wrap_text(dependent_test_cases),
+            auto_wrap_text(expected_outcome),
+            auto_wrap_text(actual_outcome),
+            auto_wrap_text(test_result),
+            auto_wrap_text(remarks),
+            auto_wrap_text(track_bug_id)
         ]
         
         # Write test case data to worksheet
@@ -332,6 +364,11 @@ def add_test_case(
             cell.value = value
             cell.alignment = STYLES["left_wrap"]
             cell.border = STYLES["black_border"]
+            cell.font = Font(color="000000", size=9)
+
+            # Adjust row height based on wrapped lines
+            max_lines = max(str(v).count('\n') + 1 if isinstance(v, str) else 1 for v in test_case_data)
+            ws.row_dimensions[next_row].height = max(15, max_lines * 15)
         
         return f"Test case '{test_case_id}' added to row {next_row} in sheet '{sheet_name}'."
     except Exception as e:
@@ -351,20 +388,20 @@ def add_multiple_test_cases(wb_id: str, test_cases: List[Dict[str, str]], sheet_
         for test_case in test_cases:
             try:
                 # Extract required fields with defaults
-                traceability_req_id = test_case.get("traceability_req_id", "")
-                test_case_id = test_case.get("test_case_id", "")
-                priority = test_case.get("priority", "Medium")
-                test_case_objective = test_case.get("test_case_objective", "")
-                test_precondition = test_case.get("test_precondition", "")
-                test_steps = test_case.get("test_steps", "")
-                test_inputs = test_case.get("test_inputs", "")
-                test_case_design_methodology = test_case.get("test_case_design_methodology", "")
-                dependent_test_cases = test_case.get("dependent_test_cases", "None")
-                expected_outcome = test_case.get("expected_outcome", "")
-                actual_outcome = test_case.get("actual_outcome", "")
-                test_result = test_case.get("test_result", "Not Tested")
-                remarks = test_case.get("remarks", "")
-                track_bug_id = test_case.get("track_bug_id", "")
+                traceability_req_id = auto_wrap_text(test_case.get("traceability_req_id", ""))
+                test_case_id = auto_wrap_text(test_case.get("test_case_id", ""))
+                priority = auto_wrap_text(test_case.get("priority", "Medium"))
+                test_case_objective = auto_wrap_text(test_case.get("test_case_objective", ""))
+                test_precondition = auto_wrap_text(test_case.get("test_precondition", ""))
+                test_steps = step_wrap(test_case.get("test_steps", ""))
+                test_inputs = auto_wrap_text(test_case.get("test_inputs", ""))
+                test_case_design_methodology = auto_wrap_text(test_case.get("test_case_design_methodology", ""))
+                dependent_test_cases = auto_wrap_text(test_case.get("dependent_test_cases", "None"))
+                expected_outcome = auto_wrap_text(test_case.get("expected_outcome", ""))
+                actual_outcome = auto_wrap_text(test_case.get("actual_outcome", ""))
+                test_result = auto_wrap_text(test_case.get("test_result", "Not Tested"))
+                remarks = auto_wrap_text(test_case.get("remarks", ""))
+                track_bug_id = auto_wrap_text(test_case.get("track_bug_id", ""))
                 
                 # Find next available row
                 next_row = get_next_available_row(ws, sheet_name)
@@ -372,7 +409,7 @@ def add_multiple_test_cases(wb_id: str, test_cases: List[Dict[str, str]], sheet_
                 # Validate test result
                 valid_results = ["Not Tested", "Passed", "Failed"]
                 if test_result not in valid_results:
-                    test_result = "Not Tested"
+                    test_result = ""
                 
                 # Prepare and write test case data
                 test_case_data = [
@@ -387,6 +424,11 @@ def add_multiple_test_cases(wb_id: str, test_cases: List[Dict[str, str]], sheet_
                     cell.value = value
                     cell.alignment = STYLES["left_wrap"]
                     cell.border = STYLES["black_border"]
+                    cell.font = Font(color="000000", size=9)
+
+                    # Adjust row height based on wrapped lines
+                    max_lines = max(str(v).count('\n') + 1 if isinstance(v, str) else 1 for v in test_case_data)
+                    ws.row_dimensions[next_row].height = max(15, max_lines * 15)
                 
                 added_count += 1
                 
@@ -596,14 +638,18 @@ def update_testing_details(
         # Fill left block (B5:D10 label, E5:H10 value)
         for i, (label, value) in enumerate(zip(left_labels, left_values)):
             row = 5 + i
-            ws.cell(row=row, column=5, value=value)   # E
-            ws.cell(row=row, column=5).alignment = STYLES["left_wrap"]
+            cell = ws.cell(row=row, column=5, value=value)
+            cell.alignment = STYLES["left_wrap"]
+            cell.border = STYLES["black_border"]
+            cell.font = Font(color="000000", size=9)
  
         # Fill right block (I5:I10 label, J5:M10 value)
         for i, (label, value) in enumerate(zip(right_labels, right_values)):
             row = 5 + i
-            ws.cell(row=row, column=10, value=value)  # J
-            ws.cell(row=row, column=10).alignment = STYLES["left_wrap"]
+            cell = ws.cell(row=row, column=10, value=value)
+            cell.alignment = STYLES["left_wrap"]
+            cell.border = STYLES["black_border"]
+            cell.font = Font(color="000000", size=9)
  
         return f"Testing details updated on sheet '{sheet_name}'."
     except Exception as e:
@@ -686,6 +732,7 @@ def delete_workbook(wb_id: str) -> str:
         return f"Workbook '{wb_id}' deleted from memory."
     except Exception as e:
         return f"Error: {str(e)}"
+
 
 if __name__ == "__main__":
     mcp.run()
