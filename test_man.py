@@ -734,5 +734,35 @@ def delete_workbook(wb_id: str) -> str:
         return f"Error: {str(e)}"
 
 
+@mcp.tool(description="Get all requirements from the Functional Requirements sheet and Non-Functional Requirements sheet.")
+def get_requirments_from_srs_xlsx_tool(wb_id: str, sheet_name: str = "Functional Requirements and Non-Functional Requirements") -> str:
+    try:
+        wb = WORKBOOKS.get(wb_id)
+        
+        if sheet_name not in wb.sheetnames:
+            return f"Error: Sheet '{sheet_name}' not found."
+        
+        ws = wb[sheet_name]
+        test_cases = []
+        
+        
+        for row in range(start_row, end_row):
+            # Check if Test Case ID is not empty
+            test_case_id = ws.cell(row=row, column=3).value
+            if test_case_id and str(test_case_id).strip():
+                test_case = {}
+                for col_index, field_name in enumerate(TEST_CASE_COLUMNS, start=2):
+                    cell_value = ws.cell(row=row, column=col_index).value
+                    test_case[field_name] = cell_value if cell_value is not None else ""
+                test_cases.append(f"Row {row}: {test_case}")
+        
+        if not test_cases:
+            return f"No test cases found in sheet '{sheet_name}'."
+        
+        return f"Found {len(test_cases)} test cases:\n" + "\n".join(test_cases)
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 if __name__ == "__main__":
     mcp.run()
