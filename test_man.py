@@ -745,6 +745,8 @@ def get_requirments_from_srs_xlsx_tool(wb_id: str, sheet_name: str = "Functional
         ws = wb[sheet_name]
         test_cases = []
         
+        start_row = CONFIG["test_case_start_row"]
+        end_row = start_row + CONFIG["max_test_cases"]
         
         for row in range(start_row, end_row):
             # Check if Test Case ID is not empty
