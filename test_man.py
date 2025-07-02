@@ -7,7 +7,7 @@ Excel Test Case MCP Server (Professional, Procedural, AI/Agent Ready)
 - Systematic test case management with validation
 """
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter

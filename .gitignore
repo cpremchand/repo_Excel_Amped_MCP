@@ -196,3 +196,7 @@ cython_debug/
 !sample.xlsx
 *.xlsx
 *.pdf
+
+--my temps---
+FYI.md
+.vscode
