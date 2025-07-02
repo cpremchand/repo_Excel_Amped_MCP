@@ -18,26 +18,17 @@ import threading
 from datetime import datetime
 import textwrap
 import re
-
-def step_wrap(text: str) -> str:
-    """
-    Adds newlines before each numbered step (1., 2., 3., ...) for clearer formatting.
-    """
-    # Clean up input whitespace
-    text = text.strip()
-
-    # Ensure new line before each number + dot (e.g., 2. or 10.)
-    return re.sub(r'\s*(?=\d+\.)', '\n', text)
+from typing import Optional
 
 
 mcp = FastMCP("Excel Test Case MCP Server")
 
-
+'''
 # --- Helper Functions ---
 def get_next_available_row(ws, sheet_name: str = "SW Validation Testing") -> int:
     ...
     return row
-
+'''
 
 
 def auto_wrap_text(text: str, max_len: int = 50) -> str:
@@ -75,11 +66,10 @@ class WorkbookStore:
             self._workbooks[wb_id] = load_workbook(template_path)
     
     def create_blank(self, wb_id: str):
-        wb_id = str(uuid.uuid4())
-        self._workbooks[wb_id] = Workbook()
-        
-        self._workbooks[wb_id].calculation_properties.fullCalcOnLoad = True
-        return wb_id
+        with self._lock:
+            if wb_id in self._workbooks:
+                raise ValueError(f"Workbook '{wb_id}' already exist.")
+            self._workbooks[wb_id] = Workbook()
     
     def get(self, wb_id: str):
         with self._lock:
@@ -271,7 +261,7 @@ def setup_sw_validation_sheet(ws):
 # --- MCP Tools ---
 
 @mcp.tool(description="Create a new Excel workbook from template. If template_path not provided, creates SW Validation Testing sheet from scratch.")
-def create_workbook(wb_id: str, template_path: str = None) -> str:
+def create_workbook(wb_id: str, template_path: Optional[str] = None) -> str:
     try:
         if template_path is None:
             template_path = CONFIG.get("default_template_path")
@@ -325,21 +315,21 @@ def add_test_case(
 ) -> str:
     try:
         wb = WORKBOOKS.get(wb_id)
-        
+
         # Get the target worksheet
         if sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
         else:
             return f"Error: Sheet '{sheet_name}' not found in workbook '{wb_id}'."
-        
+
         # Find next available row
         next_row = get_next_available_row(ws, sheet_name)
-        
+
         # Validate test result
         valid_results = ["Not Tested", "Passed", "Failed"]
         if test_result not in valid_results:
             test_result = "Not Tested"
-        
+
         # Prepare test case data
         test_case_data = [
             auto_wrap_text(traceability_req_id),
@@ -357,34 +347,39 @@ def add_test_case(
             auto_wrap_text(remarks),
             auto_wrap_text(track_bug_id)
         ]
-        
+
         # Write test case data to worksheet
-        for col_index, value in enumerate(test_case_data, start=2):  # Start from column B (2)
+        max_lines = 1
+        for col_index, value in enumerate(test_case_data, start=2):
             cell = ws.cell(row=next_row, column=col_index)
             cell.value = value
-            cell.alignment = STYLES["left_wrap"]
+            # Apply alignment with proper wrapping
+            cell.alignment = Alignment(wrap_text=True, vertical='top', horizontal='left')
             cell.border = STYLES["black_border"]
             cell.font = Font(color="000000", size=9)
+            if isinstance(value, str):
+                lines = value.count('\n') + 1
+                max_lines = max(max_lines, lines)
 
-            # Adjust row height based on wrapped lines
-            max_lines = max(str(v).count('\n') + 1 if isinstance(v, str) else 1 for v in test_case_data)
-            ws.row_dimensions[next_row].height = max(15, max_lines * 15)
-        
+        # Set row height based on most wrapped lines
+        ws.row_dimensions[next_row].height = max(15, max_lines * 15)
+
         return f"Test case '{test_case_id}' added to row {next_row} in sheet '{sheet_name}'."
     except Exception as e:
         return f"Error: {str(e)}"
+
 
 @mcp.tool(description="Add multiple test cases at once. Each test case should be a dictionary with required fields.")
 def add_multiple_test_cases(wb_id: str, test_cases: List[Dict[str, str]], sheet_name: str = "SW Validation Testing") -> str:
     try:
         wb = WORKBOOKS.get(wb_id)
-        
+
         if sheet_name not in wb.sheetnames:
             return f"Error: Sheet '{sheet_name}' not found in workbook '{wb_id}'."
-        
+
         ws = wb[sheet_name]
         added_count = 0
-        
+
         for test_case in test_cases:
             try:
                 # Extract required fields with defaults
@@ -402,15 +397,15 @@ def add_multiple_test_cases(wb_id: str, test_cases: List[Dict[str, str]], sheet_
                 test_result = auto_wrap_text(test_case.get("test_result", "Not Tested"))
                 remarks = auto_wrap_text(test_case.get("remarks", ""))
                 track_bug_id = auto_wrap_text(test_case.get("track_bug_id", ""))
-                
+
                 # Find next available row
                 next_row = get_next_available_row(ws, sheet_name)
-                
+
                 # Validate test result
                 valid_results = ["Not Tested", "Passed", "Failed"]
                 if test_result not in valid_results:
-                    test_result = ""
-                
+                    test_result = "Not Tested"
+
                 # Prepare and write test case data
                 test_case_data = [
                     traceability_req_id, test_case_id, priority, test_case_objective,
@@ -418,26 +413,28 @@ def add_multiple_test_cases(wb_id: str, test_cases: List[Dict[str, str]], sheet_
                     dependent_test_cases, expected_outcome, actual_outcome, test_result,
                     remarks, track_bug_id
                 ]
-                
+
+                max_lines = 1
                 for col_index, value in enumerate(test_case_data, start=2):
                     cell = ws.cell(row=next_row, column=col_index)
                     cell.value = value
-                    cell.alignment = STYLES["left_wrap"]
+                    cell.alignment = Alignment(wrap_text=True, vertical='top', horizontal='left')
                     cell.border = STYLES["black_border"]
                     cell.font = Font(color="000000", size=9)
+                    if isinstance(value, str):
+                        lines = value.count('\n') + 1
+                        max_lines = max(max_lines, lines)
 
-                    # Adjust row height based on wrapped lines
-                    max_lines = max(str(v).count('\n') + 1 if isinstance(v, str) else 1 for v in test_case_data)
-                    ws.row_dimensions[next_row].height = max(15, max_lines * 15)
-                
+                ws.row_dimensions[next_row].height = max(15, max_lines * 15)
                 added_count += 1
-                
+
             except Exception as tc_error:
                 print(f"Warning: Failed to add test case {test_case.get('test_case_id', 'Unknown')}: {str(tc_error)}")
-        
+
         return f"Successfully added {added_count} test cases to sheet '{sheet_name}'."
     except Exception as e:
         return f"Error: {str(e)}"
+
 
 @mcp.tool(description="Update a specific test case by Test Case ID.")
 def update_test_case(
@@ -733,7 +730,7 @@ def delete_workbook(wb_id: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
-
+"""
 @mcp.tool(description="Get all requirements from the Functional Requirements sheet and Non-Functional Requirements sheet.")
 def get_requirments_from_srs_xlsx_tool(wb_id: str, sheet_name: str = "Functional Requirements and Non-Functional Requirements") -> str:
     try:
@@ -765,6 +762,6 @@ def get_requirments_from_srs_xlsx_tool(wb_id: str, sheet_name: str = "Functional
     except Exception as e:
         return f"Error: {str(e)}"
 
-
+"""
 if __name__ == "__main__":
     mcp.run()
