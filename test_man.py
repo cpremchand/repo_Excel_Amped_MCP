@@ -294,7 +294,7 @@ def open_workbook(wb_id: str, filepath: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
-@mcp.tool(description="Add a single test case to the SW Validation Testing sheet, SW Intergration Testing Sheet, SW Unit Testing Sheet.")
+@mcp.tool(description="Add a single test case to the SW Validation Testing sheet, SW Integration Testing Sheet, SW Unit Testing Sheet.")
 def add_test_case(
     wb_id: str,
     traceability_req_id: str,
@@ -572,7 +572,7 @@ Next Available Row: {get_next_available_row(ws, sheet_name)}"""
     except Exception as e:
         return f"Error: {str(e)}"
 
-@mcp.tool(description="Update testing details section (project info, dates, etc.) also for SW Intergration Testing Sheet and SW Unit Testing Sheet.")
+@mcp.tool(description="Update testing details section (project info, dates, etc.) also for SW Integration Testing Sheet and SW Unit Testing Sheet.")
 def update_testing_details(
     wb_id: str,
     project_name: str = "",
@@ -653,7 +653,7 @@ def update_testing_details(
         return f"Error: {str(e)}"
 
 
-@mcp.tool(description="Extract testing details from the given sheet (SW Validation Testing, SW Intergration Testing, SW Unit Testing).")
+@mcp.tool(description="Extract testing details from the given sheet (SW Validation Testing, SW Integration Testing, SW Unit Testing).")
 def get_testing_details(wb_id: str, sheet_name: str = "SW Validation Testing") -> dict:
     try:
         wb = WORKBOOKS.get(wb_id)
